@@ -1,22 +1,33 @@
 import requests
-import hmac 
+import hmac
 import hashlib
 import json
 
 SECRET = "my_super_secret_token_123"
 URL = "http://127.0.0.1:8000/webhook"
 
-data = {"action" : "opened", "pull_request":{"title" : "Test PR"}}
-payload = json.dumps(data).encode()
+def send_event(event_type, action):
+    data = {"action": action, "pull_request": {"number": 101, "head": {"sha": "abc1234"}, "title": "Test"}}
+    # If not PR, GitHub sends different structures, but for this test, the header matters most.
+    
+    payload = json.dumps(data).encode()
+    signature = "sha256=" + hmac.new(SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    
+    headers = {
+        "X-Hub-Signature-256": signature,
+        "X-GitHub-Event": event_type,
+        "Content-Type": "application/json"
+    }
+    
+    print(f"\n--- Sending {event_type} / {action} ---")
+    resp = requests.post(URL, data=payload, headers=headers)
+    print(f"Status: {resp.status_code} | Body: {resp.text}")
 
-signature = "sha256=" + hmac.new(SECRET.encode(), payload, hashlib.sha256).hexdigest()
+# Test 1: Valid PR Open
+send_event("pull_request", "opened")
 
-headers = {
-    "X-Hub-Signature-256": signature,
-    "X-GitHub-Event": "pull_request",
-    "Content-Type": "application/json"
-}
+# Test 2: Invalid Action (e.g. closed)
+send_event("pull_request", "closed")
 
-response = requests.post(URL, data=payload, headers=headers)
-print(f"Status Code: {response.status_code}")
-print(f"Response: {response.text}")
+# Test 3: Invalid Event (e.g. push)
+send_event("push", "pushed")

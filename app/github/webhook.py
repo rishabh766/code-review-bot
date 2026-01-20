@@ -1,7 +1,11 @@
 import hmac
 import hashlib
 import os 
+import logging
 from fastapi import APIRouter, Request, HTTPException, Header
+
+logging.basicConfig(level = logging.INFO)
+logger = logging.getLogger("webhook")
 
 router = APIRouter()
 
@@ -30,9 +34,30 @@ async def handle_webhook(request: Request, x_hub_signature_256 : str = Header(No
 
     verify_signature(payload_bytes, x_hub_signature_256)
     payload = await request.json()
-    event_type = request.headers.get("X-GitHub-Event", "unknown")
-    print(f"Recieved a valid webhook. Event : {event_type}")
-    return {"status" : "recieved"}
+    event_type = request.headers.get("X-GitHub-Event")
+    if event_type != "pull_request":
+        logger.info(f"ignoring event : {event_type}")
+        return {"status" : "ignored", "reason" : "not_a_pull_request"}
+    action = payload.get("action")
+    if action not in ["opened", "synchronize", "reopened"]:
+        logger.info(f"igonoring PR action : {action}")
+        return {"status" : "ignored", "reason": "unsupported_action"}
+    
+    pr_data = payload.get("pull_request", {})
+    repo_data = payload.get("repository", {})
+
+    log_context = {
+        "repo" : repo_data.get("full_name"),
+        "pr" : pr_data.get("number"),
+        "action" : action,
+        "head_sha" : pr_data.get("head", {}).get("sha")
+    }
+    logger.info(f"Processing PR Event : {log_context}")
+
+    #TODO: trigger the analysis pipeline here
+
+    return {"status" : "accepted", "context" : log_context}
+
 
 
     
