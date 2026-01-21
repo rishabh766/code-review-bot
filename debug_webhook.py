@@ -7,8 +7,18 @@ SECRET = "my_super_secret_token_123"
 URL = "http://127.0.0.1:8000/webhook"
 
 def send_event(event_type, action):
-    data = {"action": action, "pull_request": {"number": 101, "head": {"sha": "abc1234"}, "title": "Test"}}
-    # If not PR, GitHub sends different structures, but for this test, the header matters most.
+    # We added the 'repository' block here to fix the KeyError
+    data = {
+        "action": action,
+        "pull_request": {
+            "number": 101, 
+            "head": {"sha": "abc1234"}, 
+            "title": "Test PR"
+        },
+        "repository": {
+            "full_name": "testuser/code-review-bot"
+        }
+    }
     
     payload = json.dumps(data).encode()
     signature = "sha256=" + hmac.new(SECRET.encode(), payload, hashlib.sha256).hexdigest()
