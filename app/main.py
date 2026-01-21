@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 from app.github.webhook import router as webhook_router
+from app.storage.db import init_db
 
 load_dotenv()
+init_db()
 
 app = FastAPI(titel = "Code Review Bot", version = "1.0.0")
 
