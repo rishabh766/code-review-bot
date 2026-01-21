@@ -1,31 +1,31 @@
 from app.github.diff_parser import DiffParser
 
-mock_diff = """
-diff --git a/app/main.py b/app/main.py
-index 83c5a9..b4d210 100644
---- a/app/main.py
-+++ b/app/main.py
-@@ -1,4 +1,4 @@
- def hello():
--    print("Hi")
-+    print("Hello World")
-     return True
- 
-diff --git a/README.md b/README.md
-index 99a3d..12b4c 100644
---- a/README.md
-+++ b/README.md
-@@ -1 +1,2 @@
- # Code Review Bot
-+Now with AI!
-"""
+# Mock data mimicking the GitHub API response
+mock_files_json = [
+    {"filename": "app/main.py", "status": "modified", "patch": "print('hello')"},
+    {"filename": "app/deleted_file.py", "status": "removed", "patch": "some code"},
+    {"filename": "README.md", "status": "modified", "patch": "# Title"},
+    {"filename": "poetry.lock", "status": "modified", "patch": "hash..."},
+    {"filename": "app/migrations/001_initial.py", "status": "added", "patch": "class Migration..."}
+]
 
+print("--- 🧪 Testing File Filtering Logic ---")
 parser = DiffParser()
-files = parser.parse(mock_diff)
+valid_files = parser.filter_files(mock_files_json)
 
-print(f"Found {len(files)} relevant files.")
+print(f"Input: {len(mock_files_json)} files.")
+print(f"Output: {len(valid_files)} valid files.\n")
 
-for f in files:
-    print(f"Fil : {f['filename']}")
-    print(f"----Patch Start-----\n {f['patch'][:50]}....\n ----Patch End----")
-    
+for f in valid_files:
+    print(f"✅ Keeping: {f['filename']} ({f['status']})")
+
+# Validation Logic
+filenames = [f['filename'] for f in valid_files]
+if "app/deleted_file.py" in filenames:
+    print("\n❌ FAIL: Did not filter deleted file.")
+elif "README.md" in filenames:
+    print("\n❌ FAIL: Did not filter Markdown.")
+elif "app/migrations/001_initial.py" in filenames:
+    print("\n❌ FAIL: Did not filter migration.")
+else:
+    print("\n✨ PASS: Filtering logic is correct.")
