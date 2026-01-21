@@ -1,39 +1,62 @@
 from app.analysis.ruff_runner import RuffRunner
 from app.analysis.bandit_runner import BanditRunner
 from app.llm.reviewer import LLMReviewer
+from app.rag.indexer import FAISSIndexer
+from app.rag.retriever import Retriever
 
 class Aggregator:
     def __init__(self):
         self.ruff = RuffRunner()
         self.bandit = BanditRunner()
-        self.llm = LLMReviewer(api_key=None)
+        self.llm = LLMReviewer() # Uses real Key from Env
+        
+        # Initialize Real RAG
+        self.indexer = FAISSIndexer()
+        self.retriever = Retriever(self.indexer)
 
     def analyze_pr(self, files: list) -> dict:
-        """
-        Returns a dictionary with 'summary_text' and 'inline_comments'
-        """
         all_findings = []
         
-        # 1. Run Static Analysis
+        # 1. Static Analysis
         for file_obj in files:
-            filename = file_obj['filename']
-            all_findings.extend(self.ruff.analyze(filename))
-            all_findings.extend(self.bandit.analyze(filename))
+            all_findings.extend(self.ruff.analyze(file_obj['filename']))
+            all_findings.extend(self.bandit.analyze(file_obj['filename']))
 
-        # 2. Run LLM
+        # 2. RAG Indexing
+        # In a real app, you would walk the entire repo. 
+        # For now, we manually create a 'knowledge base' of files to simulate repo context.
+        repo_context = {
+            "config.py": "SECRET_KEY = os.getenv('KEY') # Production Config",
+            "utils.py": "def safe_eval(x): return x # This is the safe way",
+            "auth.py": "def login(): pass"
+        }
+        # Add the PR files themselves to context so we can search them too
+        for f in files:
+            repo_context[f['filename']] = f.get("patch", "")
+
+        self.indexer.index_repo(repo_context)
+        
+        # 3. Retrieve Context
+        # Query using the patch of the first file
+        query = files[0]['patch'] if files else ""
+        context_str = self.retriever.retrieve_context(query)
+        
+        # 4. LLM Review
         allowed_filenames = [f['filename'] for f in files]
-        llm_result = self.llm.review_diff("dummy_diff", allowed_filenames)
-        llm_comments = llm_result['comments']
+        llm_result = self.llm.review_diff(
+            diff_text=query, 
+            allowed_files=allowed_filenames, 
+            context=context_str
+        )
         
-        # 3. Combine everything
-        total_findings = all_findings + llm_comments
+        # Combine Findings
+        total_findings = all_findings + llm_result['comments']
         
-        # 4. Prepare Inline Comments (High/Medium severity only)
+        # Filter Inline vs Summary
         inline_comments = []
         summary_items = []
         
         for f in total_findings:
-            # Inline comment logic: Must have a line number and be important
             if f.line > 0 and f.severity in ["high", "medium"]:
                 inline_comments.append({
                     "path": f.file,
@@ -43,17 +66,16 @@ class Aggregator:
             else:
                 summary_items.append(f)
 
-        # 5. Build Markdown Summary (Only for things NOT posted inline)
+        # Build Report
         report = []
-        report.append(f"#Code Review Bot Report")
+        report.append(f"#  Code Review Bot Report")
         report.append(f"_{llm_result['summary']}_")
         
         if inline_comments:
-            report.append(f"\n### Posted {len(inline_comments)} Inline Comments")
-            report.append("_Check the 'Files Changed' tab for detailed review._")
-
+            report.append(f"\n###  Posted {len(inline_comments)} Inline Comments")
+        
         if summary_items:
-            report.append("\n### Other Findings")
+            report.append("\n###  Other Findings")
             for f in summary_items:
                 report.append(f.to_markdown())
 

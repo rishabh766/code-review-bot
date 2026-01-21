@@ -5,3 +5,8 @@ python-dotenv==1.0.1
 requests==2.31.0
 ruff==0.1.14
 bandit==1.7.7
+# Production ML Deps (Unpinned to allow best match for your OS)
+google-generativeai
+faiss-cpu
+torch
+numpy

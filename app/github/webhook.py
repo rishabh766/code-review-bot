@@ -43,9 +43,21 @@ def process_pr(event_data: dict):
 
     # 2. Fetch Files
     files_json = client.get_pr_files(owner, repo, pr_number)
+    
     if not files_json:
-        logger.warning("⚠️ Could not fetch files. Using Mock Data.")
-        files_json = [{"filename": "bad_code.py", "status": "modified", "patch": "x=1"}]
+        logger.warning(" Could not fetch files. Using Mock Data.")
+        # FIX: Add '+' to simulate a real Git Diff
+        files_json = [
+            {
+                "filename": "bad_code.py", 
+                "status": "modified", 
+                "patch": """@@ -1,2 +1,3 @@
+                +x = 1
+                +password = '123'
+                +eval("print('hacking system')")
+                """
+            }
+        ]
 
     # 3. Filter & Analyze
     valid_files = parser.filter_files(files_json)
