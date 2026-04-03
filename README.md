@@ -1,188 +1,148 @@
-Code Review Bot
+***
 
-A comprehensive, automated code review assistant designed to integrate directly with GitHub Pull Requests.
-This bot combines deterministic static analysis tools with context-aware Large Language Models (LLMs) to catch bugs, security vulnerabilities, and style issues.
+# 🤖 Code Review Bot
 
-Overview
+A comprehensive, automated code review assistant designed to integrate directly with GitHub Pull Requests. This bot acts as intelligent middleware, combining the speed and deterministic precision of static analysis tools with the context-aware reasoning of Large Language Models (LLMs) to catch bugs, security vulnerabilities, and maintainability issues.
 
-The Code Review Bot acts as intelligent middleware between your GitHub repository and multiple code analysis tools.
+## 🌟 Key Features
 
-When a Pull Request is opened or updated, the bot automatically:
+* **Hybrid Analysis Engine:**
+    * **Ruff:** Lightning-fast Python linting and code formatting checks (targets `E` and `F` rules).
+    * **Bandit:** Security-focused static analysis to detect common Python vulnerabilities.
+    * *(Extensible)* **Semgrep:** Ready-to-use module included for deeper security rule analysis.
+* **AI-Powered Reasoning (Google Gemini):**
+    * Utilizes `gemini-2.5-flash` (with fallback to `gemini-pro`) to detect logic bugs, evaluate code maintainability, and suggest complex refactoring.
+    * Outputs specific, actionable findings mapped directly to the diff.
+* **Context-Aware Reviews via RAG:**
+    * Uses **Google Gemini Embeddings** (`text-embedding-004`) and **FAISS** vector storage to index repository files.
+    * Ensures LLM suggestions are grounded in your actual codebase, understanding project-specific utilities, and configuration patterns rather than reviewing isolated snippets.
+* **Smart Deduplication:**
+    * Local **SQLite** database (`bot_memory.db`) generates SHA-256 fingerprint hashes for every comment.
+    * Prevents spam by ensuring the bot never posts the exact same comment on the same line across multiple commits.
+* **Seamless GitHub Integration:**
+    * Automated HMAC-secured Webhook handling (via FastAPI).
+    * Smart Diff Parsing: Automatically ignores generated code, locked files, and migrations (`venv/`, `node_modules/`, `.lock`, etc.).
+    * Posts inline batch reviews and comprehensive summary reports directly to the Pull Request.
 
-Fetches the code changes
+---
 
-Runs a suite of analysis tools
+## 🏗 Architecture & Workflow
 
-Generates actionable feedback
+1.  **Event Trigger:** A GitHub Webhook fires when a PR is opened or synchronized.
+2.  **Fetch & Filter:** `GitHubClient` fetches the PR diff. `DiffParser` extracts valid Python files.
+3.  **Static Analysis:** `RuffRunner` and `BanditRunner` scan the target files locally.
+4.  **RAG Indexing:** `FAISSIndexer` embeds repository context using Gemini, and `Retriever` fetches the most relevant code chunks for the current diff.
+5.  **LLM Review:** The diff and the retrieved context are passed to `LLMReviewer` (Gemini) using a strict JSON-enforced system prompt.
+6.  **Aggregation & Deduplication:** `Aggregator` combines static and LLM findings. `Deduplicator` filters out previously posted comments.
+7.  **Action:** Inline comments and a high-level summary report are posted to GitHub via the REST API.
 
-Posts inline comments and a summary report directly on the PR
+---
 
-It leverages Retrieval-Augmented Generation (RAG) to provide the LLM with relevant repository context, ensuring AI-generated suggestions are grounded in the actual codebase rather than isolated snippets.
+## 🚀 Getting Started
 
-Key Features
-Hybrid Analysis Engine
+### Prerequisites
 
-Combines the precision of static linters with the reasoning capabilities of LLMs.
+* **Python:** 3.11+ (See `runtime.txt`)
+* **GitHub Account:** A Personal Access Token (PAT) with `repo` scopes.
+* **Google Gemini API Key:** For embeddings and LLM generation.
 
-Ruff
-
-Extremely fast Python linting
-
-Code formatting checks
-
-Bandit
-
-Security-focused static analysis
-
-Detects common Python vulnerabilities
-
-Gemini (LLM)
-
-Logic bug detection
-
-Maintainability analysis
-
-Complex refactoring suggestions
-
-Context-Aware Reviews (RAG)
-
-Uses FAISS vector storage to index repository files
-
-Enables the LLM to understand project-specific utilities and configuration patterns
-
-Smart Deduplication
-
-Tracks posted comments in a local SQLite database
-
-Prevents repeated comments across multiple commits
-
-GitHub Integration
-
-Automated webhook handling
-
-Inline comments for specific lines of code
-
-Summary reports for high-level feedback
-
-Configurable
-
-Modular architecture
-
-Easily extensible to add new analysis tools
-
-Architecture
-
-The system is built using FastAPI and follows a modular design:
-
-Components
-
-Webhook Handler
-Listens for GitHub pull_request events.
-
-Diff Parser
-Identifies valid Python files and filters out generated code or migrations.
-
-Aggregator
-Orchestrates the entire review workflow:
-
-Executes RuffRunner and BanditRunner
-
-Embeds code context using GeminiEmbeddings
-
-Retrieves similar code chunks via FAISSIndexer
-
-Sends the diff and context to the LLMReviewer
-
-GitHub Client
-Posts aggregated findings back to GitHub, ensuring only new and unique comments are published.
-
-Installation
-Prerequisites
-
-Python 3.9+
-
-A GitHub account and repository
-
-Google Gemini API key
-
-Setup Steps
-1. Clone the Repository
-git clone https://github.com/rishabh766/code-review-bot.git
+### 1. Clone the Repository
+```bash
+git clone https://github.com/yourusername/code-review-bot.git
 cd code-review-bot
+```
 
-2. Create a Virtual Environment
+### 2. Environment Setup
+Create a virtual environment and install the dependencies:
+```bash
 python -m venv venv
-source venv/bin/activate
-# On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-3. Install Dependencies
 pip install -r requirements.txt
+```
 
-Environment Configuration
-
-Create a .env file in the root directory:
-
+### 3. Configuration
+Create a `.env` file in the root directory and populate it with your credentials:
+```env
 # GitHub Configuration
 GITHUB_TOKEN=your_github_pat_token
-GITHUB_WEBHOOK_SECRET=your_webhook_secret
+GITHUB_WEBHOOK_SECRET=your_webhook_secret_string
 
 # AI Configuration
 GEMINI_API_KEY=your_google_gemini_api_key
+```
 
-Usage
-Running the Server
-
-Start the FastAPI server using Uvicorn:
-
+### 4. Run the Server
+Start the FastAPI server. The background deduplication database (`bot_memory.db`) will initialize automatically.
+```bash
 uvicorn app.main:app --reload
+```
+The server will be available at `http://127.0.0.1:8000`.
 
+---
 
-The server will be available at:
+## 🔗 Connecting to GitHub
 
-http://127.0.0.1:8000
+To receive webhooks locally, you must expose your local server to the internet using a tool like [ngrok](https://ngrok.com/).
 
-Configuring the GitHub Webhook
-1. Expose Local Server
-ngrok http 8000
+1. **Expose the port:**
+   ```bash
+   ngrok http 8000
+   ```
+2. **Configure the Webhook in GitHub:**
+   * Navigate to your target repository: **Settings → Webhooks → Add webhook**
+   * **Payload URL:** `https://<your-ngrok-url>.ngrok.app/webhook`
+   * **Content type:** `application/json`
+   * **Secret:** The exact value of your `GITHUB_WEBHOOK_SECRET`
+   * **Events:** Select "Let me select individual events" -> Check **Pull requests**.
 
-2. GitHub Webhook Setup
+---
 
-Go to:
+## 📂 Project Structure
 
-Repository Settings → Webhooks → Add webhook
+```text
+code-review-bot/
+├── app/
+│   ├── analysis/       # Static analysis runners (Ruff, Bandit, Semgrep, Aggregator)
+│   ├── github/         # GH API client, webhook handler (FastAPI), Diff parser
+│   ├── llm/            # Gemini generative model integration and system prompts
+│   ├── rag/            # FAISS indexing, Gemini embeddings, and context retrieval
+│   ├── storage/        # SQLite DB init, Deduplication logic, Pydantic models
+│   └── main.py         # FastAPI application entry point
+├── bad_code.py         # Sample file for testing tools
+├── check_models.py     # Script to verify available Gemini models
+├── debug_webhook.py    # Script to simulate GitHub webhook payloads locally
+├── test_*.py           # Modular testing scripts for LLM, Aggregator, Parser, etc.
+├── requirements.txt    # Python dependencies
+└── .env                # Environment variables (not tracked)
+```
 
+---
 
-Configure:
+## 🧪 Testing and Debugging
 
-Payload URL
+The repository includes several modular test scripts to verify components without triggering full webhooks:
 
-https://your-url.ngrok.io/webhook
+* **Test Static Analysis:** Runs Ruff and Bandit against `bad_code.py`.
+    ```bash
+    python test_analysis.py
+    ```
+* **Test Diff Parsing:** Verifies the file filtering logic (ignoring migrations, locks, etc.).
+    ```bash
+    python test_parser.py
+    ```
+* **Test LLM Connection:** Sends a mock diff to Gemini to verify JSON formatting and response.
+    ```bash
+    python test_llm.py
+    ```
+* **Simulate Webhook Event:** Bypasses GitHub and sends a mock HMAC-signed payload to your local FastAPI server.
+    ```bash
+    python debug_webhook.py
+    ```
 
+---
 
-Content type: application/json
+## 🛠 Extensibility
 
-Secret: Same value as GITHUB_WEBHOOK_SECRET
-
-Events: Pull requests
-
-Testing
-
-You can test individual components using the provided scripts.
-
-Test Static Analysis Tools
-python test_analysis.py
-
-Test LLM Connection
-python test_llm.py
-
-Simulate Webhook Event
-python debug_webhook.py
-
-Project Structure
-app/
-├── analysis/     # Wrappers for static analysis tools (Ruff, Bandit)
-├── github/       # GitHub API client and diff parsing logic
-├── llm/          # Prompts and Gemini model interface
-├── rag/          # Embedding, indexing, and FAISS retrieval logic
-├── storage/      # Database models and deduplication logic
-└── main.py       # Application entry point
+* **Adding New Tools:** Create a new runner class in `app/analysis/` that returns a list of `Finding` Pydantic models, then register it in `app/analysis/aggregator.py`.
+* **Customizing the AI:** You can adjust the LLM persona, strictness, and output format by editing `app/llm/prompts.py`.
